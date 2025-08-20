@@ -30,7 +30,7 @@ model = AutoModelForCausalLM.from_pretrained(
     device_map="auto"
 )
 
-# Prepare model for LoRA
+# Prepare model for k-bit training + add LoRA
 model = prepare_model_for_kbit_training(model)
 
 lora_config = LoraConfig(
@@ -43,6 +43,16 @@ lora_config = LoraConfig(
 )
 
 model = get_peft_model(model, lora_config)
+
+# --------------------
+# Ensure gradients are enabled
+# --------------------
+model.train()
+for name, param in model.named_parameters():
+    if "lora" in name:
+        param.requires_grad = True
+
+model.print_trainable_parameters()  # Debug
 
 # --------------------
 # Dataset
@@ -88,11 +98,10 @@ trainer = Trainer(
     model=model,
     args=training_args,
     train_dataset=dataset,
-    tokenizer=tokenizer
+    processing_class=tokenizer  # replaces deprecated tokenizer arg
 )
 
-model.config.use_cache = False  # Needed for gradient checkpointing
-model.print_trainable_parameters()  # Debug: shows how many params are trainable
+model.config.use_cache = False  # Needed for checkpointing
 
 # --------------------
 # Train
